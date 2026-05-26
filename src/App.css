@@ -810,29 +810,34 @@ h2 {
   .page {
     display: block;
     width: 100%;
+    min-height: 100dvh;
     overflow-x: hidden;
   }
 
   .slides {
-    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
     width: 100%;
     overflow-x: hidden;
   }
 
   .slide-section {
     min-height: 100svh;
+    min-height: 100dvh;
     padding: 0;
     place-items: start center;
   }
 
   .slide-content {
     min-height: 100svh;
+    min-height: 100dvh;
     align-items: stretch;
   }
 
   .slide-card {
     width: 100%;
     min-height: 100svh;
+    min-height: 100dvh;
     height: auto;
     aspect-ratio: auto;
     border-radius: 0;
