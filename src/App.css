@@ -1305,6 +1305,14 @@ h2 {
   }
 
   .japan-motor-card__sticker {
+    top: min(
+      calc(var(--motor-mobile-image-top) + var(--motor-mobile-image-height) - clamp(58px, 10vw, 84px)),
+      calc(100svh - 166px)
+    );
+    top: min(
+      calc(var(--motor-mobile-image-top) + var(--motor-mobile-image-height) - clamp(58px, 10vw, 84px)),
+      calc(100dvh - 166px)
+    );
     width: 154px;
   }
 
