@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+const OBSERVER_THRESHOLDS = [0.35, 0.55, 0.75]
+const SCROLL_SETTLE_DELAY_MS = 180
+const OBSERVER_SUPPRESS_MS = 850
+
 export const useActiveSlide = (count: number) => {
   const [activeIndex, setActiveIndex] = useState(0)
   const activeIndexRef = useRef(0)
@@ -9,6 +13,16 @@ export const useActiveSlide = (count: number) => {
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const sectionsRef = useRef<Array<HTMLElement | null>>([])
 
+  const isObserverSuppressed = useCallback(
+    () => Date.now() < ignoreObserverUntilRef.current,
+    [],
+  )
+
+  const isValidIndex = useCallback(
+    (index: number) => Number.isInteger(index) && index >= 0 && index < count,
+    [count],
+  )
+
   const commitActiveIndex = useCallback((index: number) => {
     if (index === activeIndexRef.current) return
 
@@ -16,20 +30,27 @@ export const useActiveSlide = (count: number) => {
     setActiveIndex(index)
   }, [])
 
-  const scheduleScrollCommit = useCallback(() => {
+  const clearScrollSettleTimer = useCallback(() => {
     if (scrollSettleTimerRef.current !== null) {
       window.clearTimeout(scrollSettleTimerRef.current)
+      scrollSettleTimerRef.current = null
     }
+  }, [])
 
-    scrollSettleTimerRef.current = window.setTimeout(() => {
-      const pendingIndex = pendingIndexRef.current
-      pendingIndexRef.current = null
+  const flushPendingIndex = useCallback(() => {
+    const pendingIndex = pendingIndexRef.current
+    pendingIndexRef.current = null
 
-      if (pendingIndex !== null) {
-        commitActiveIndex(pendingIndex)
-      }
-    }, 180)
-  }, [commitActiveIndex])
+    if (pendingIndex !== null && isValidIndex(pendingIndex)) {
+      commitActiveIndex(pendingIndex)
+    }
+  }, [commitActiveIndex, isValidIndex])
+
+  const scheduleScrollCommit = useCallback(() => {
+    clearScrollSettleTimer()
+
+    scrollSettleTimerRef.current = window.setTimeout(flushPendingIndex, SCROLL_SETTLE_DELAY_MS)
+  }, [clearScrollSettleTimer, flushPendingIndex])
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -39,15 +60,15 @@ export const useActiveSlide = (count: number) => {
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
 
         if (!visible) return
-        if (Date.now() < ignoreObserverUntilRef.current) return
+        if (isObserverSuppressed()) return
 
         const idx = Number((visible.target as HTMLElement).dataset.index)
-        if (!Number.isNaN(idx) && idx >= 0 && idx < count && idx !== activeIndexRef.current) {
+        if (isValidIndex(idx) && idx !== activeIndexRef.current) {
           pendingIndexRef.current = idx
           scheduleScrollCommit()
         }
       },
-      { threshold: [0.35, 0.55, 0.75] },
+      { threshold: OBSERVER_THRESHOLDS },
     )
 
     sectionsRef.current.forEach((el) => {
@@ -55,14 +76,14 @@ export const useActiveSlide = (count: number) => {
     })
 
     return () => observer.disconnect()
-  }, [count, scheduleScrollCommit])
+  }, [isObserverSuppressed, isValidIndex, scheduleScrollCommit])
 
   useEffect(() => {
     const scroller = scrollerRef.current
     if (!scroller) return undefined
 
     const handleScroll = () => {
-      if (Date.now() < ignoreObserverUntilRef.current) return
+      if (isObserverSuppressed()) return
       scheduleScrollCommit()
     }
 
@@ -70,11 +91,9 @@ export const useActiveSlide = (count: number) => {
 
     return () => {
       scroller.removeEventListener('scroll', handleScroll)
-      if (scrollSettleTimerRef.current !== null) {
-        window.clearTimeout(scrollSettleTimerRef.current)
-      }
+      clearScrollSettleTimer()
     }
-  }, [scheduleScrollCommit])
+  }, [clearScrollSettleTimer, isObserverSuppressed, scheduleScrollCommit])
 
   const setScrollerRef = useCallback((el: HTMLDivElement | null) => {
     scrollerRef.current = el
@@ -85,17 +104,15 @@ export const useActiveSlide = (count: number) => {
   }, [])
 
   const openSlide = useCallback((index: number) => {
-    if (index === activeIndexRef.current) return
+    if (!isValidIndex(index) || index === activeIndexRef.current) return
 
     pendingIndexRef.current = null
-    if (scrollSettleTimerRef.current !== null) {
-      window.clearTimeout(scrollSettleTimerRef.current)
-    }
+    clearScrollSettleTimer()
 
-    ignoreObserverUntilRef.current = Date.now() + 850
+    ignoreObserverUntilRef.current = Date.now() + OBSERVER_SUPPRESS_MS
     commitActiveIndex(index)
     sectionsRef.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [commitActiveIndex])
+  }, [clearScrollSettleTimer, commitActiveIndex, isValidIndex])
 
   return { activeIndex, setScrollerRef, setSectionRef, openSlide }
 }
